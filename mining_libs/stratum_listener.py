@@ -76,7 +76,15 @@ class StratumProxyService(GenericService):
     extranonce2_size = None
     tail_iterator = 0
     registered_tails= []
-    
+
+    custom_user = None
+    custom_password = None
+   
+    @classmethod
+    def _set_custom_user(cls, custom_user, custom_password):
+        cls.custom_user = custom_user
+        cls.custom_password = custom_password
+ 
     @classmethod
     def _set_upstream_factory(cls, f):
         cls._f = f
@@ -118,7 +126,11 @@ class StratumProxyService(GenericService):
     def authorize(self, worker_name, worker_password, *args):
         if self._f.client == None or not self._f.client.connected:
             yield self._f.on_connect
-                        
+
+        if self.custom_user:
+            worker_name = self.custom_user
+            worker_password = self.custom_password
+
         result = (yield self._f.rpc('mining.authorize', [worker_name, worker_password]))
         defer.returnValue(result)
     
@@ -152,6 +164,11 @@ class StratumProxyService(GenericService):
         if self._f.client == None or not self._f.client.connected:
             raise SubmitException("Upstream not connected")
 
+        if self.custom_user:
+            remote_name = self.custom_user
+        else:
+            remote_name = worker_name
+
         session = self.connection_ref().get_session()
         tail = session.get('tail')
         if tail == None:
@@ -160,7 +177,7 @@ class StratumProxyService(GenericService):
         start = time.time()
         
         try:
-            result = (yield self._f.rpc('mining.submit', [worker_name, job_id, tail+extranonce2, ntime, nonce]))
+            result = (yield self._f.rpc('mining.submit', [remote_name, job_id, tail+extranonce2, ntime, nonce]))
         except RemoteServiceException as exc:
             response_time = (time.time() - start) * 1000
             log.info("[%dms] Share from '%s' REJECTED: %s" % (response_time, worker_name, str(exc)))
